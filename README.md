@@ -3,6 +3,8 @@
 Server MCP care ia datele **direct de la sursă**, nu printr-un intermediar plătit.
 Un singur fișier Python, **zero dependențe** (doar biblioteca standard), rulează local.
 
+📖 **Tutorial și documentație: [sergiudanstan.github.io/anaf-mcp](https://sergiudanstan.github.io/anaf-mcp/)**
+
 ## Ce date ia și de unde
 
 | Sursă | Endpoint | Ce conține |
