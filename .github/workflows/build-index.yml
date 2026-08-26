@@ -1,0 +1,71 @@
+name: Construieste indexul public
+
+# ONRC republica lista firmelor lunar, Finantele publica situatiile financiare
+# anual. Reconstruim pe 10 ale lunii si publicam rezultatul ca release.
+on:
+  schedule:
+    - cron: "0 3 10 * *"
+  workflow_dispatch:
+    inputs:
+      ani:
+        description: "Anii de situatii financiare (separati prin virgula)"
+        default: "2024,2023"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Construieste indexul
+        run: |
+          python3 tools/build_index.py \
+            --ani "${{ github.event.inputs.ani || '2024,2023' }}" \
+            --iesire anaf-index.sqlite --gzip
+          ls -la anaf-index.sqlite.gz
+
+      - name: Verifica indexul inainte de publicare
+        run: |
+          python3 - <<'PY'
+          import sqlite3, sys
+          con = sqlite3.connect("anaf-index.sqlite")
+          meta = dict(con.execute("SELECT cheie, valoare FROM meta").fetchall())
+          firme = int(meta.get("firme", 0))
+          fin = int(meta.get("financiar", 0))
+          print("firme:", firme, "| randuri financiare:", fin, "| ani:", meta.get("ani"))
+          # Praguri deliberat conservatoare: prind un fisier sursa trunchiat,
+          # care altfel ar produce un index care "arata bine" dar e incomplet.
+          if firme < 3_000_000:
+              sys.exit("index incomplet: doar %d firme" % firme)
+          if fin < 500_000:
+              sys.exit("index incomplet: doar %d randuri financiare" % fin)
+          # firmele mari trebuie sa fie acolo: ele stau intr-un fisier separat
+          # de grosul firmelor si e usor sa fie omise
+          top = con.execute("SELECT denumire, cifra_afaceri FROM financiar "
+                            "ORDER BY cifra_afaceri DESC LIMIT 1").fetchone()
+          print("cea mai mare cifra de afaceri:", top)
+          if not top or (top[1] or 0) < 10_000_000_000:
+              sys.exit("lipsesc firmele mari: maximul e %s" % (top,))
+          PY
+
+      - name: Publica release-ul
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="data-$(date +%Y-%m)"
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" anaf-index.sqlite.gz \
+            --title "Index $(date +%Y-%m)" \
+            --notes "Index construit automat: firme ONRC + situatii financiare. Se descarca cu: python3 anaf_mcp.py --sync"
+          # 'latest' este ce descarca MCP-ul, deci il mutam pe indexul nou
+          gh release delete latest --yes 2>/dev/null || true
+          gh release create latest anaf-index.sqlite.gz \
+            --title "Index curent" \
+            --notes "Indicat de --sync. Reconstruit lunar din $TAG."

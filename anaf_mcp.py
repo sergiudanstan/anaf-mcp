@@ -25,6 +25,8 @@ import hashlib
 import base64
 import zlib
 import csv
+import gzip
+import shutil
 import sqlite3
 import threading
 import urllib.request
@@ -674,7 +676,56 @@ def tool_search_caen(args):
 # cautarea merge offline si instant. sqlite3 e in biblioteca standard.
 # --------------------------------------------------------------------------
 
+# Indexul unificat (firme ONRC + situatii financiare), construit de
+# tools/build_index.py si publicat ca release pe GitHub.
+# Tag fix, ca sa nu depinda de care release e "cel mai nou".
+INDEX_URL = "https://github.com/sergiudanstan/anaf-mcp/releases/download/latest/anaf-index.sqlite.gz"
+INDEX_DB = os.path.join(CACHE_DIR, "anaf-index.sqlite")
+# Indexul vechi, doar cu firme, construit local cu --sync-onrc.
 ONRC_DB = os.path.join(CACHE_DIR, "onrc_firme.sqlite")
+
+
+def index_db():
+    """Indexul complet daca exista, altfel cel local, altfel None."""
+    for cale in (INDEX_DB, ONRC_DB):
+        if os.path.exists(cale):
+            return cale
+    return None
+
+
+def index_sync(progres=None):
+    """Descarca indexul gata construit de pe GitHub (rapid si sigur)."""
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    tmp_gz = INDEX_DB + ".gz.tmp"
+    tmp = INDEX_DB + ".tmp"
+    if progres:
+        progres("descarc indexul de pe GitHub ...")
+    req = urllib.request.Request(INDEX_URL, headers={"User-Agent": USER_AGENT})
+    scris = 0
+    with urllib.request.urlopen(req, timeout=180) as r:
+        asteptat = int(r.headers.get("Content-Length") or 0) or None
+        with open(tmp_gz, "wb") as f:
+            while True:
+                b = r.read(1 << 20)
+                if not b:
+                    break
+                f.write(b)
+                scris += len(b)
+                if progres and scris % (25 << 20) < (1 << 20):
+                    progres("  %d MB..." % (scris >> 20))
+    if asteptat and scris < asteptat:
+        os.remove(tmp_gz)
+        raise RuntimeError("descarcare trunchiata: %d din %d bytes" % (scris, asteptat))
+    if progres:
+        progres("dezarhivez...")
+    with gzip.open(tmp_gz, "rb") as fi, open(tmp, "wb") as fo:
+        shutil.copyfileobj(fi, fo, 1 << 20)
+    os.remove(tmp_gz)
+    os.replace(tmp, INDEX_DB)
+    con = sqlite3.connect(INDEX_DB)
+    meta = dict(con.execute("SELECT cheie, valoare FROM meta").fetchall())
+    con.close()
+    return meta
 
 
 def _norm_nume(s):
@@ -797,14 +848,16 @@ def onrc_sync(cale_csv=None, progres=None):
 
 
 def onrc_cauta(nume, judet=None, limita=20):
-    if not os.path.exists(ONRC_DB):
+    db = index_db()
+    if db is None:
         raise RuntimeError(
-            "Indexul ONRC lipseste. Ruleaza o data: python3 anaf_mcp.py --sync-onrc "
-            "(descarca ~650 MB de la data.gov.ro si construieste indexul local)")
+            "Indexul de firme lipseste. Ruleaza o data: python3 anaf_mcp.py --sync "
+            "(descarca indexul gata construit de pe GitHub). Alternativ, --sync-onrc "
+            "il construieste local din CSV-ul de pe data.gov.ro.")
     q = _norm_nume(nume)
     if not q:
         return [], {}
-    con = sqlite3.connect(ONRC_DB)
+    con = sqlite3.connect(db)
     sql = "SELECT cui, denumire, cod_inmatriculare, data_inmatriculare, forma_juridica, judet, localitate FROM firme WHERE nume_norm LIKE ?"
     par = ["%" + q + "%"]
     if judet:
@@ -829,6 +882,57 @@ def tool_search_company(args):
             "sursa": "Registrul Comertului via data.gov.ro (%s)" % meta.get("sursa", ""),
             "firme_in_index": int(meta.get("firme", 0) or 0),
             "nota": "Pentru date fiscale la zi (TVA, inactiv), ia CUI-ul de aici si cheama anaf_firma."}
+
+
+def top_firme(an=None, caen=None, judet=None, limita=10, dupa="cifra_afaceri"):
+    db = index_db()
+    if db is None:
+        raise RuntimeError("Indexul lipseste. Ruleaza: python3 anaf_mcp.py --sync")
+    con = sqlite3.connect(db)
+    are = con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='financiar'").fetchone()
+    if not are:
+        con.close()
+        raise RuntimeError(
+            "Indexul local nu contine situatii financiare (a fost construit cu --sync-onrc). "
+            "Ruleaza: python3 anaf_mcp.py --sync")
+    coloane = {"cifra_afaceri": "cifra_afaceri", "profit": "profit_net", "salariati": "salariati"}
+    col = coloane.get(dupa, "cifra_afaceri")
+    if an is None:
+        an = con.execute("SELECT max(an) FROM financiar").fetchone()[0]
+    sql = ("SELECT cui, denumire, judet, caen, cifra_afaceri, profit_net, salariati "
+           "FROM financiar WHERE an = ? AND %s IS NOT NULL" % col)
+    par = [int(an)]
+    if caen:
+        c = str(caen).strip()
+        if len(c) < 4:  # prefix de diviziune/grupa CAEN, ex. '47'
+            sql += " AND caen >= ? AND caen < ?"
+            par += [int(c.ljust(4, "0")), int(c.ljust(4, "9")) + 1]
+        else:
+            sql += " AND caen = ?"
+            par.append(int(c))
+    if judet:
+        sql += " AND lower(judet) LIKE ?"
+        par.append("%" + _norm_nume(judet) + "%")
+    sql += " ORDER BY %s DESC LIMIT ?" % col
+    par.append(int(limita))
+    rows = con.execute(sql, par).fetchall()
+    meta = dict(con.execute("SELECT cheie, valoare FROM meta").fetchall())
+    con.close()
+    rez = []
+    for i, r in enumerate(rows, 1):
+        rez.append({"loc": i, "cui": r[0], "denumire": r[1], "judet": r[2],
+                    "cod_caen": r[3], "den_caen": caen_denumire(r[3]),
+                    "cifra_afaceri_lei": r[4], "profit_net_lei": r[5], "salariati": r[6]})
+    return rez, int(an), meta
+
+
+def tool_top_firme(args):
+    rez, an, meta = top_firme(args.get("an"), args.get("caen"), args.get("judet"),
+                              int(args.get("limita") or 10), args.get("dupa") or "cifra_afaceri")
+    return {"an": an, "caen": args.get("caen"), "judet": args.get("judet"),
+            "criteriu": args.get("dupa") or "cifra_afaceri", "gasite": len(rez), "clasament": rez,
+            "sursa": "Situatiile financiare anuale (Ministerul Finantelor) + ONRC, via data.gov.ro",
+            "ani_disponibili": meta.get("ani", "")}
 
 
 TOOLS = [
@@ -940,11 +1044,30 @@ TOOLS = [
             "required": ["nume"],
         },
     },
+    {
+        "name": "top_firme",
+        "description": (
+            "Clasamentul firmelor dintr-un an dupa cifra de afaceri, profit net sau numar de "
+            "salariati, filtrabil pe cod CAEN (exact sau prefix, ex. '47') si pe judet. "
+            "Foloseste situatiile financiare anuale publicate de Ministerul Finantelor. "
+            "Fara limitari de tip Free/Pro: cati vrei, atatia intoarce."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "an": {"type": "integer", "description": "Anul (implicit cel mai recent din index)"},
+                "caen": {"type": "string", "description": "Cod CAEN exact ('4754') sau prefix ('47')"},
+                "judet": {"type": "string", "description": "Judetul, ex. 'Cluj'"},
+                "dupa": {"type": "string", "description": "cifra_afaceri (implicit), profit sau salariati"},
+                "limita": {"type": "integer", "description": "Cate firme (implicit 10)"},
+            },
+        },
+    },
 ]
-
 
 HANDLERS = {
     "search_caen": tool_search_caen,
+    "top_firme": tool_top_firme,
     "search_company": tool_search_company,
     "anaf_firma": tool_anaf_firma,
     "anaf_firme": tool_anaf_firme,
@@ -1038,6 +1161,14 @@ def cli():
                          ensure_ascii=False, indent=2))
     elif a[0] == "--curs":
         print(json.dumps(tool_bnr_curs({"data": a[1] if len(a) > 1 else None}), ensure_ascii=False, indent=2))
+    elif a[0] == "--sync":
+        meta = index_sync(progres=lambda m: print(m, flush=True))
+        print("index descarcat: %s firme, %s randuri financiare, anii %s"
+              % (meta.get("firme"), meta.get("financiar"), meta.get("ani")))
+    elif a[0] == "--top":
+        print(json.dumps(tool_top_firme({"caen": a[1] if len(a) > 1 else None,
+                                         "judet": a[2] if len(a) > 2 else None}),
+                         ensure_ascii=False, indent=2))
     elif a[0] == "--sync-onrc":
         n = onrc_sync(a[1] if len(a) > 1 else None, progres=lambda m: print(m, flush=True))
         print("index ONRC construit: %d firme -> %s" % (n, ONRC_DB))

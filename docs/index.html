@@ -85,7 +85,7 @@ footer{margin:70px 0 0;padding:26px 0 50px;border-top:1px solid var(--line);colo
       <span class="badge">Un singur fișier Python</span>
       <span class="badge">Zero dependințe</span>
       <span class="badge">Fără cont, fără API key</span>
-      <span class="badge">7 tool-uri</span>
+      <span class="badge">8 tool-uri</span>
       <span class="badge">Licență MIT</span>
     </div>
     <div class="cta">
@@ -117,6 +117,7 @@ footer{margin:70px 0 0;padding:26px 0 50px;border-top:1px solid var(--line);colo
   <div class="tool"><h4>bnr_curs</h4><p>Cursul zilei sau al unei date din trecut. Pentru weekend și sărbători întoarce ultima zi bancară.</p></div>
   <div class="tool"><h4>bnr_conversie</h4><p>Conversie între valute la cursul BNR dintr-o dată anume.</p></div>
   <div class="tool"><h4>search_caen</h4><p>Caută în nomenclatorul CAEN după cod (<code>4754</code> sau prefixul <code>47</code>) ori după cuvinte din denumire. Diacriticele nu contează.</p></div>
+  <div class="tool"><h4>top_firme</h4><p>Clasamentul firmelor dintr-un an după cifra de afaceri, profit net sau salariați — filtrabil pe cod CAEN și județ. Fără limitări Free/Pro: câte ceri, atâtea primești.</p></div>
   <div class="tool"><h4>search_company</h4><p>Caută firma <strong>după denumire</strong>, nu după CUI — ANAF nu are așa ceva. Folosește lista Registrului Comerțului, indexată local. Cere o sincronizare unică.</p></div>
 </div>
 
@@ -168,11 +169,12 @@ codex mcp list</code></pre>
 }</code></pre>
 <p>Repornești complet aplicația (Quit, nu doar închis fereastra). Tool-urile apar la iconița MCP din bara de input.</p>
 
-<div class="step"><span class="num">5</span><h3>Căutarea după denumire (sincronizare unică)</h3></div>
-<p><code>search_company</code> are nevoie de lista firmelor de la Registrul Comerțului. Se descarcă o singură dată:</p>
-<pre><code>python3 anaf_mcp.py --sync-onrc</code></pre>
-<p>Trage <code>od_firme.csv</code> de pe data.gov.ro (~650 MB) și construiește un index SQLite local în <code>~/.cache/anaf-mcp/</code>. Durează câteva minute, o singură dată — ONRC republică fișierul lunar. Fără el, restul tool-urilor merg normal; doar <code>search_company</code> spune că indexul lipsește.</p>
-<p>Fluxul firesc: cauți după nume → iei CUI-ul → îl dai la <code>anaf_firma</code> pentru datele fiscale la zi.</p>
+<div class="step"><span class="num">5</span><h3>Indexul de date (sincronizare unică)</h3></div>
+<p><code>search_company</code> și <code>top_firme</code> lucrează peste un index local. Îl iei gata construit, dintr-o comandă:</p>
+<pre><code>python3 anaf_mcp.py --sync</code></pre>
+<p>Descarcă ~350 MB de pe GitHub Releases și îl despachetează în <code>~/.cache/anaf-mcp/</code>. Conține <strong>4.201.586 de firme</strong> de la Registrul Comerțului și <strong>899.961 de rânduri</strong> din situațiile financiare anuale.</p>
+<p>Indexul se reconstruiește automat lunar, printr-un workflow GitHub Actions care ia datele de la sursă, le verifică și publică rezultatul. Dacă vrei să-l construiești singur, codul e în <code>tools/build_index.py</code>.</p>
+<p>Fluxul firesc: cauți după nume → iei CUI-ul → îl dai la <code>anaf_firma</code> pentru datele fiscale <strong>la zi</strong>. Indexul e o fotografie lunară; ANAF e sursa live.</p>
 
 <div class="step"><span class="num">6</span><h3>Verificare din terminal, fără client</h3></div>
 <p>Fiecare tool are un echivalent CLI — util ca să vezi dacă problema e la server sau la client:</p>
@@ -181,6 +183,7 @@ python3 anaf_mcp.py --bilant 14399840 2024
 python3 anaf_mcp.py --curs 2026-06-30
 python3 anaf_mcp.py --caen instalatii electrice
 python3 anaf_mcp.py --cauta dante international
+python3 anaf_mcp.py --top 4754
 python3 anaf_mcp.py --test</code></pre>
 
 <h2>Dacă nu merge</h2>
@@ -200,7 +203,6 @@ python3 anaf_mcp.py --test</code></pre>
 
 <h2>Ce nu acoperă</h2>
 <p><strong>Contracte și achiziții publice (SEAP/SICAP).</strong> API-ul public de la e-licitatie.ro răspunde, dar filtrele după firmă, dată sau cod CPV sunt ignorate de server — întoarce mereu aceeași felie fixă de 2000 de înregistrări. Fără contractul corect de filtrare, orice tool peste el ar da rezultate greșite, așa că nu există aici.</p>
-<p><strong>Clasamente „top firme pe județ/CAEN/an".</strong> Cer baza de bilanțuri a tuturor firmelor, ingerată într-un backend — nu se pot face dintr-un fișier local.</p>
 <p><strong>Asociați, administratori, istoric mențiuni.</strong> ONRC le dă doar prin RECOM, contra cost. Lista reprezentanților legali există totuși ca fișier deschis pe data.gov.ro, dacă vrei să o indexezi la fel ca lista firmelor.</p>
 
 <footer class="wrap">
