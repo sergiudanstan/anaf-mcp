@@ -9,6 +9,7 @@ Un singur fișier Python, **zero dependențe** (doar biblioteca standard), rulea
 
 | Sursă | Endpoint | Ce conține |
 |---|---|---|
+| ONRC | `data.gov.ro` — „Firme înregistrate la Registrul Comerțului" | denumire, CUI, nr. reg. com., formă juridică, județ, localitate — pentru căutarea după nume |
 | ANAF | `webservicesp.anaf.ro/api/PlatitorTvaRest/v9/tva` | denumire, nr. reg. com., adresă, CAEN, TVA, TVA la încasare, split TVA, inactivi, RO e-Factura |
 | ANAF | `webservicesp.anaf.ro/bilant` | bilanțuri anuale: cifră de afaceri, profit/pierdere, active, datorii, salariați |
 | BNR | `curs.bnr.ro/nbrfxrates.xml` + arhiva pe ani | curs valutar de referință, azi și istoric |
@@ -22,6 +23,8 @@ Toate sunt publice, fără cont și fără cheie de API.
 - **`anaf_bilant`** — situațiile financiare pe un an
 - **`bnr_curs`** — cursul zilei sau al unei date din trecut (weekend/sărbătoare → ultima zi bancară)
 - **`bnr_conversie`** — conversie sumă între valute la cursul BNR dintr-o dată anume
+- **`search_caen`** — caută în nomenclatorul CAEN după cod (`4754`, sau prefix `47`) sau după cuvinte din denumire (`instalații electrice`); diacriticele nu contează
+- **`search_company`** — **caută firma după denumire**, nu după CUI. ANAF nu oferă căutare după nume, așa că se folosește lista Registrului Comerțului de pe data.gov.ro, indexată local. Necesită o sincronizare unică (vezi mai jos)
 
 ---
 
@@ -114,7 +117,23 @@ Editezi `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS
 
 Repornești complet Claude Desktop (Quit, nu doar închis fereastra). Tool-urile apar la iconița de MCP din bara de input.
 
-## 5. Verificare din terminal, fără client
+## 5. Căutarea după denumire (sincronizare unică)
+
+`search_company` are nevoie de lista firmelor de la Registrul Comerțului. Se descarcă o singură dată:
+
+```bash
+python3 anaf_mcp.py --sync-onrc
+```
+
+Descarcă `od_firme.csv` de pe data.gov.ro (~650 MB) și construiește un index SQLite local în `~/.cache/anaf-mcp/`. Durează câteva minute, o singură dată; ONRC republică fișierul lunar, deci merită repetat din când în când. Fără el, celelalte tool-uri merg normal — doar `search_company` întoarce un mesaj că indexul lipsește.
+
+```bash
+python3 anaf_mcp.py --cauta primaria cluj      # test rapid dupa sincronizare
+```
+
+Fluxul firesc: cauți după nume → iei CUI-ul din rezultat → îl dai la `anaf_firma` pentru datele fiscale la zi.
+
+## 6. Verificare din terminal, fără client
 
 Fiecare tool are un echivalent CLI, util ca să vezi dacă problema e la server sau la client:
 
@@ -122,10 +141,12 @@ Fiecare tool are un echivalent CLI, util ca să vezi dacă problema e la server 
 python3 anaf_mcp.py --firma RO14399840
 python3 anaf_mcp.py --bilant 14399840 2024
 python3 anaf_mcp.py --curs 2026-06-30
+python3 anaf_mcp.py --caen instalatii electrice
+python3 anaf_mcp.py --cauta dante international
 python3 anaf_mcp.py --test
 ```
 
-## 6. Dacă nu merge
+## 7. Dacă nu merge
 
 | Simptom | Cauză uzuală |
 |---|---|
@@ -156,8 +177,11 @@ Cache pe disc în `~/.cache/anaf-mcp/` (sau `ANAF_MCP_CACHE_DIR`), cu TTL per ti
 
 ## Ce NU acoperă
 
-ONRC nu are API public gratuit (asociați, administratori, istoric mențiuni se iau prin RECOM, contra cost).
-Codurile CAEN sunt întoarse ca număr de ANAF; dacă vrei și denumirea lor la `anaf_firma`, se adaugă un tabel local CAEN Rev.3.
+**Contracte și achiziții publice (SEAP/SICAP).** API-ul public de la `e-licitatie.ro` răspunde, dar filtrele după firmă, dată sau cod CPV sunt ignorate de server — întoarce mereu aceeași felie fixă de 2000 de înregistrări. Fără contractul corect de filtrare, orice tool construit peste el ar da rezultate greșite, așa că nu există aici.
+
+**Clasamente de tipul „top firme pe județ/CAEN/an".** Cer baza de bilanțuri a tuturor firmelor, ingerată într-un backend. Nu se pot face dintr-un fișier local fără dependințe.
+
+**Asociați, administratori, istoric mențiuni.** ONRC le dă doar prin RECOM, contra cost. (Lista reprezentanților legali există totuși ca fișier deschis pe data.gov.ro, dacă vrei să o indexezi similar.)
 
 ## Licență
 
