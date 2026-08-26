@@ -807,7 +807,7 @@ def onrc_sync(cale_csv=None, progres=None):
     con.execute("PRAGMA journal_mode=OFF")
     con.execute("PRAGMA synchronous=OFF")
     con.execute("""CREATE TABLE firme (cui INTEGER, denumire TEXT, nume_norm TEXT,
-                   cod_inmatriculare TEXT, data_inmatriculare TEXT, forma_juridica TEXT,
+                   nr_reg_com TEXT, data_inmatriculare TEXT, forma_juridica TEXT,
                    judet TEXT, localitate TEXT)""")
 
     n = 0
@@ -858,7 +858,11 @@ def onrc_cauta(nume, judet=None, limita=20):
     if not q:
         return [], {}
     con = sqlite3.connect(db)
-    sql = "SELECT cui, denumire, cod_inmatriculare, data_inmatriculare, forma_juridica, judet, localitate FROM firme WHERE nume_norm LIKE ?"
+    coloane = {r[1] for r in con.execute("PRAGMA table_info(firme)")}
+    # indexurile construite local inainte de v1.2 aveau alt nume pentru coloana asta
+    col_reg = "nr_reg_com" if "nr_reg_com" in coloane else "cod_inmatriculare"
+    sql = ("SELECT cui, denumire, %s, data_inmatriculare, forma_juridica, judet, localitate "
+           "FROM firme WHERE nume_norm LIKE ?" % col_reg)
     par = ["%" + q + "%"]
     if judet:
         sql += " AND lower(judet) LIKE ?"
