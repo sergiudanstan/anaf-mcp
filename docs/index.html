@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>anaf-mcp — date publice ANAF și BNR, direct în Claude sau Codex</title>
+<meta name="description" content="Server MCP local pentru date publice ANAF și BNR: verificare firme după CUI, TVA, inactivi, bilanțuri anuale și curs valutar. Un singur fișier Python, fără dependințe.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🇷🇴</text></svg>">
+<style>
+:root{
+  --bg:#fbfaf8; --panel:#ffffff; --panel-2:#f4f2ee; --ink:#1a1917; --muted:#6b6862;
+  --line:#e3dfd8; --accent:#a8410f; --accent-soft:#fdf0e8; --ok:#2f6a42; --code-bg:#f4f2ee;
+  --radius:12px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#141311; --panel:#1c1b18; --panel-2:#232220; --ink:#ece9e3; --muted:#9c968c;
+    --line:#312f2b; --accent:#e8763c; --accent-soft:#2a1b12; --ok:#7fc294; --code-bg:#111110;
+  }
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font:16px/1.65 ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:880px;margin:0 auto;padding:0 22px}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+code,pre{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace}
+code{background:var(--code-bg);border:1px solid var(--line);border-radius:5px;padding:.12em .38em;font-size:.88em}
+pre{background:var(--code-bg);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;overflow-x:auto;font-size:14px;line-height:1.6;margin:14px 0}
+pre code{background:none;border:0;padding:0;font-size:inherit}
+h1,h2,h3{line-height:1.25;letter-spacing:-.015em}
+h2{font-size:26px;margin:56px 0 6px;padding-top:22px;border-top:1px solid var(--line)}
+h3{font-size:18px;margin:30px 0 4px}
+p{margin:12px 0}
+/* hero */
+header{padding:72px 0 44px;background:linear-gradient(180deg,var(--accent-soft),transparent)}
+.flag{font-size:13px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--accent)}
+h1{font-size:48px;margin:10px 0 0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:-.03em}
+.tagline{font-size:20px;color:var(--muted);margin:12px 0 0;max-width:62ch}
+.badges{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 0}
+.badge{font-size:12.5px;font-weight:600;padding:4px 11px;border-radius:99px;background:var(--panel);border:1px solid var(--line);color:var(--muted)}
+.cta{display:flex;flex-wrap:wrap;gap:10px;margin:26px 0 0}
+.btn{display:inline-block;padding:10px 18px;border-radius:9px;font-weight:600;font-size:15px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+.btn:hover{text-decoration:none;border-color:var(--accent)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-primary:hover{opacity:.9;border-color:var(--accent)}
+/* tables */
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:14.5px;display:block;overflow-x:auto}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
+tbody tr:last-child td{border-bottom:0}
+/* tools */
+.tools{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin:20px 0}
+.tool{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px}
+.tool h4{margin:0 0 6px;font-size:15px;font-family:ui-monospace,Menlo,monospace;color:var(--accent)}
+.tool p{margin:0;font-size:14px;color:var(--muted);line-height:1.55}
+/* callout */
+.note{background:var(--panel-2);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:13px 16px;margin:18px 0;font-size:14.5px}
+.note strong{color:var(--accent)}
+/* steps */
+.step{display:flex;align-items:center;gap:11px;margin:34px 0 4px}
+.num{flex:none;width:27px;height:27px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;font-size:14px;font-weight:700}
+.step h3{margin:0}
+/* copy button */
+.pre-wrap{position:relative}
+.copy{position:absolute;top:9px;right:9px;font-size:11.5px;font-weight:600;padding:4px 9px;border-radius:6px;
+  border:1px solid var(--line);background:var(--panel);color:var(--muted);cursor:pointer;opacity:0;transition:opacity .15s}
+.pre-wrap:hover .copy,.copy:focus{opacity:1}
+.copy:hover{color:var(--accent);border-color:var(--accent)}
+footer{margin:70px 0 0;padding:26px 0 50px;border-top:1px solid var(--line);color:var(--muted);font-size:14px}
+@media(max-width:600px){h1{font-size:34px}.tagline{font-size:17px}header{padding:48px 0 32px}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="flag">MCP server · date publice românești</div>
+    <h1>anaf-mcp</h1>
+    <p class="tagline">Verifici firme după CUI, citești bilanțuri și iei cursul BNR — direct din Claude Code, Claude Desktop sau Codex. Datele vin de la sursă, nu printr-un intermediar plătit.</p>
+    <div class="badges">
+      <span class="badge">Un singur fișier Python</span>
+      <span class="badge">Zero dependințe</span>
+      <span class="badge">Fără cont, fără API key</span>
+      <span class="badge">Licență MIT</span>
+    </div>
+    <div class="cta">
+      <a class="btn btn-primary" href="#tutorial">Instalare în 2 minute</a>
+      <a class="btn" href="https://github.com/sergiudanstan/anaf-mcp">Cod pe GitHub →</a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+<h2>Ce face</h2>
+<p>Un server <a href="https://modelcontextprotocol.io">MCP</a> care rulează local pe calculatorul tău și dă asistentului acces la trei surse publice și gratuite:</p>
+<table>
+  <thead><tr><th>Sursă</th><th>Ce conține</th></tr></thead>
+  <tbody>
+    <tr><td><strong>ANAF</strong> — registrul TVA</td><td>denumire, nr. reg. com., adresă, CAEN, plătitor TVA, TVA la încasare, split TVA, firme inactive, radiate, RO e-Factura</td></tr>
+    <tr><td><strong>ANAF</strong> — bilanțuri</td><td>situații financiare anuale: cifră de afaceri, profit/pierdere, active, datorii, număr de salariați</td></tr>
+    <tr><td><strong>BNR</strong> — curs valutar</td><td>cursul de referință de azi și din arhiva pe ani</td></tr>
+  </tbody>
+</table>
+<p>Toate sunt endpoint-uri publice: nu ai nevoie de cont, de cheie de API sau de abonament la vreun agregator.</p>
+
+<h2>Tool-urile</h2>
+<div class="tools">
+  <div class="tool"><h4>anaf_firma</h4><p>Un CUI: datele complete plus un verdict scurt — „OK" sau „ATENȚIE" dacă firma e inactivă, radiată sau neplătitoare de TVA.</p></div>
+  <div class="tool"><h4>anaf_firme</h4><p>Până la 100 de CUI-uri într-un singur apel. Întoarce și listele separate de firme inactive, neplătitoare de TVA și negăsite — bun pentru curățat baza de clienți sau furnizori.</p></div>
+  <div class="tool"><h4>anaf_bilant</h4><p>Situațiile financiare pe un an, cu indicatorii în lei și denumirea CAEN.</p></div>
+  <div class="tool"><h4>bnr_curs</h4><p>Cursul zilei sau al unei date din trecut. Pentru weekend și sărbători întoarce ultima zi bancară.</p></div>
+  <div class="tool"><h4>bnr_conversie</h4><p>Conversie între valute la cursul BNR dintr-o dată anume.</p></div>
+</div>
+
+<h2 id="tutorial">Tutorial</h2>
+
+<div class="step"><span class="num">1</span><h3>Instalare</h3></div>
+<p>Ai nevoie doar de Python 3 — există deja pe macOS și Linux; pe Windows se ia de pe <a href="https://www.python.org/downloads/">python.org</a>.</p>
+<pre><code>git clone https://github.com/sergiudanstan/anaf-mcp.git
+cd anaf-mcp
+python3 anaf_mcp.py --firma 14399840</code></pre>
+<p>Dacă vezi un JSON cu <code>"denumire": "DANTE INTERNATIONAL SA"</code>, serverul merge. Reține calea absolută — o folosești la pașii următori:</p>
+<pre><code>pwd    # ex: /Users/dan/anaf-mcp
+       # → calea completă e /Users/dan/anaf-mcp/anaf_mcp.py</code></pre>
+
+<div class="step"><span class="num">2</span><h3>Claude Code</h3></div>
+<p>O singură comandă, din orice folder:</p>
+<pre><code>claude mcp add anaf -- python3 /CALEA/ABSOLUTA/CATRE/anaf-mcp/anaf_mcp.py</code></pre>
+<p>Adaugă <code>-s user</code> dacă vrei serverul disponibil în toate proiectele, nu doar în cel curent:</p>
+<pre><code>claude mcp add anaf -s user -- python3 /CALEA/ABSOLUTA/CATRE/anaf-mcp/anaf_mcp.py
+claude mcp list          # anaf trebuie să apară cu ✓ connected</code></pre>
+<p>În sesiune, <code>/mcp</code> îți arată tool-urile încărcate. De acolo încolo ceri în limbaj natural:</p>
+<pre><code>verifică CUI 14399840 la ANAF
+ia-mi bilanțul pe 2024 pentru 14399840 și spune-mi marja netă
+am lista asta de CUI-uri din facturi — care sunt inactive sau neplătitoare de TVA?
+cât era euro pe 30 iunie 2026?
+convertește 12.500 EUR în RON la cursul din 15 martie 2026</code></pre>
+<p>Ștergi serverul cu <code>claude mcp remove anaf</code>.</p>
+
+<div class="step"><span class="num">3</span><h3>Codex (OpenAI Codex CLI)</h3></div>
+<p>Editezi <code>~/.codex/config.toml</code> și adaugi:</p>
+<pre><code>[mcp_servers.anaf]
+command = "python3"
+args = ["/CALEA/ABSOLUTA/CATRE/anaf-mcp/anaf_mcp.py"]</code></pre>
+<p>Pe versiunile recente de Codex CLI merge și direct din terminal:</p>
+<pre><code>codex mcp add anaf -- python3 /CALEA/ABSOLUTA/CATRE/anaf-mcp/anaf_mcp.py
+codex mcp list</code></pre>
+<p>Repornești <code>codex</code> și ceri la fel, în limbaj natural.</p>
+<div class="note"><strong>Capcana uzuală:</strong> în Codex secțiunea se numește <code>mcp_servers</code> (cu underscore), iar în Claude <code>mcpServers</code> (camelCase). E cea mai frecventă greșeală de configurare.</div>
+
+<div class="step"><span class="num">4</span><h3>Claude Desktop</h3></div>
+<p>Editezi <code>~/Library/Application Support/Claude/claude_desktop_config.json</code> pe macOS, sau <code>%APPDATA%\Claude\claude_desktop_config.json</code> pe Windows:</p>
+<pre><code>{
+  "mcpServers": {
+    "anaf": {
+      "command": "python3",
+      "args": ["/CALEA/ABSOLUTA/CATRE/anaf-mcp/anaf_mcp.py"]
+    }
+  }
+}</code></pre>
+<p>Repornești complet aplicația (Quit, nu doar închis fereastra). Tool-urile apar la iconița MCP din bara de input.</p>
+
+<div class="step"><span class="num">5</span><h3>Verificare din terminal, fără client</h3></div>
+<p>Fiecare tool are un echivalent CLI — util ca să vezi dacă problema e la server sau la client:</p>
+<pre><code>python3 anaf_mcp.py --firma RO14399840
+python3 anaf_mcp.py --bilant 14399840 2024
+python3 anaf_mcp.py --curs 2026-06-30
+python3 anaf_mcp.py --test</code></pre>
+
+<h2>Dacă nu merge</h2>
+<table>
+  <thead><tr><th>Simptom</th><th>Cauză uzuală</th></tr></thead>
+  <tbody>
+    <tr><td>serverul nu apare / „failed to connect"</td><td>calea din config nu e absolută, sau <code>python3</code> nu e în PATH-ul clientului — pune calea completă, ex. <code>/usr/bin/python3</code></td></tr>
+    <tr><td>merge în terminal, dar nu în client</td><td>ai editat alt fișier de config, sau nu ai repornit clientul</td></tr>
+    <tr><td>HTTP 403 de la ANAF</td><td>ai modificat <code>USER_AGENT</code>; WAF-ul ANAF respinge șirurile cu paranteze sau <code>;</code></td></tr>
+    <tr><td>date vechi</td><td>e cache-ul: <code>rm -rf ~/.cache/anaf-mcp</code></td></tr>
+  </tbody>
+</table>
+
+<h2>Cache și limite</h2>
+<p>Cache pe disc în <code>~/.cache/anaf-mcp/</code> (sau <code>ANAF_MCP_CACHE_DIR</code>), cu prospețime diferită per tip de date: 6 ore datele de firmă, 30 de zile bilanțurile, 30 de minute cursul zilei, 90 de zile arhiva anilor încheiați.</p>
+<p>Limitele ANAF sunt respectate de server: maximum <strong>100 de CUI-uri per apel</strong> și <strong>un apel pe secundă</strong> — cererile se serializează și așteaptă singure.</p>
+
+<h2>Ce nu acoperă</h2>
+<p>ONRC nu are API public gratuit: asociații, administratorii și istoricul mențiunilor se iau prin RECOM, contra cost. Codurile CAEN sunt întoarse ca număr de ANAF; pentru denumirea lor la <code>anaf_firma</code> se adaugă un tabel local CAEN Rev.3.</p>
+
+<footer class="wrap">
+  <p><a href="https://github.com/sergiudanstan/anaf-mcp">github.com/sergiudanstan/anaf-mcp</a> · licență MIT · datele aparțin ANAF și BNR, serverul doar le citește din endpoint-urile publice.</p>
+</footer>
+</main>
+
+<script>
+document.querySelectorAll('pre').forEach(function(pre){
+  var wrap=document.createElement('div'); wrap.className='pre-wrap';
+  pre.parentNode.insertBefore(wrap,pre); wrap.appendChild(pre);
+  var b=document.createElement('button'); b.className='copy'; b.type='button'; b.textContent='copiază';
+  b.addEventListener('click',function(){
+    navigator.clipboard.writeText(pre.innerText).then(function(){
+      b.textContent='copiat ✓'; setTimeout(function(){b.textContent='copiază';},1400);
+    }).catch(function(){ b.textContent='eroare'; });
+  });
+  wrap.appendChild(b);
+});
+</script>
+</body>
+</html>
