@@ -129,11 +129,14 @@ python3 anaf_mcp.py --sync
 
 Descarcă ~350 MB de pe GitHub Releases și îl despachetează în `~/.cache/anaf-mcp/` (~830 MB pe disc). Conține **4.201.586 de firme** de la Registrul Comerțului și **899.961 de rânduri** din situațiile financiare anuale.
 
-Indexul se reconstruiește automat lunar, printr-un workflow GitHub Actions care ia datele de la sursă, verifică integritatea și publică rezultatul. Codul e în `tools/build_index.py`, dacă vrei să-l construiești singur:
+Indexul se reconstruiește rulând build-ul și publicând rezultatul ca release:
 
 ```bash
 python3 tools/build_index.py --iesire anaf-index.sqlite --gzip
+gh release delete latest --yes && gh release create latest anaf-index.sqlite.gz --title "Index curent"
 ```
+
+Build-ul **nu poate rula pe runnerele GitHub**: data.gov.ro rezolvă DNS-ul, dar refuză conexiunile venite din cloud-ul din afara țării (verificat — `curl` expiră după 20 s de pe `ubuntu-latest`, în timp ce de pe o rețea din România merge). Workflow-ul din `.github/workflows/` există, dar are sens doar pe un runner self-hosted dintr-o rețea de unde portalul se vede.
 
 Fără index, celelalte tool-uri merg normal — doar cele două spun că lipsește.
 

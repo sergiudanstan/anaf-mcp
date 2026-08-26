@@ -1,10 +1,19 @@
 name: Construieste indexul public
 
-# ONRC republica lista firmelor lunar, Finantele publica situatiile financiare
-# anual. Reconstruim pe 10 ale lunii si publicam rezultatul ca release.
+# ATENTIE: data.gov.ro NU este accesibil de pe runnerele GitHub. DNS-ul se
+# rezolva, dar conexiunile HTTPS expira - portalul filtreaza IP-urile de cloud
+# din afara tarii. Verificat pe 2026-08-26: curl catre https://data.gov.ro/
+# expira dupa 20s de pe ubuntu-latest, in timp ce de pe o retea din Romania
+# merge normal.
+#
+# De aceea NU exista declansare programata: ar esua lunar, degeaba. Workflow-ul
+# ramane util doar pe un runner self-hosted dintr-o retea de unde data.gov.ro
+# se vede (ex. calculatorul tau). Altfel, construieste indexul local:
+#
+#     python3 tools/build_index.py --iesire anaf-index.sqlite --gzip
+#     gh release delete latest --yes
+#     gh release create latest anaf-index.sqlite.gz --title "Index curent"
 on:
-  schedule:
-    - cron: "0 3 10 * *"
   workflow_dispatch:
     inputs:
       ani:
@@ -13,6 +22,7 @@ on:
 
 jobs:
   build:
+    # pe un runner GitHub asta esueaza la descarcare; schimba in self-hosted
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:

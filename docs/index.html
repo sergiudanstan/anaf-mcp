@@ -173,7 +173,7 @@ codex mcp list</code></pre>
 <p><code>search_company</code> și <code>top_firme</code> lucrează peste un index local. Îl iei gata construit, dintr-o comandă:</p>
 <pre><code>python3 anaf_mcp.py --sync</code></pre>
 <p>Descarcă ~350 MB de pe GitHub Releases și îl despachetează în <code>~/.cache/anaf-mcp/</code>. Conține <strong>4.201.586 de firme</strong> de la Registrul Comerțului și <strong>899.961 de rânduri</strong> din situațiile financiare anuale.</p>
-<p>Indexul se reconstruiește automat lunar, printr-un workflow GitHub Actions care ia datele de la sursă, le verifică și publică rezultatul. Dacă vrei să-l construiești singur, codul e în <code>tools/build_index.py</code>.</p>
+<p>Indexul se reconstruiește cu <code>tools/build_index.py</code> și se publică ca release. Build-ul trebuie rulat dintr-o rețea din România: data.gov.ro rezolvă DNS-ul, dar refuză conexiunile din cloud-ul din afara țării — pe runnerele GitHub expiră.</p>
 <p>Fluxul firesc: cauți după nume → iei CUI-ul → îl dai la <code>anaf_firma</code> pentru datele fiscale <strong>la zi</strong>. Indexul e o fotografie lunară; ANAF e sursa live.</p>
 
 <div class="step"><span class="num">6</span><h3>Verificare din terminal, fără client</h3></div>
