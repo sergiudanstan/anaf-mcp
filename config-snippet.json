@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "anaf": {
+      "command": "python3",
+      "args": ["/CALEA/ABSOLUTA/CATRE/anaf-mcp/anaf_mcp.py"]
+    }
+  }
+}
