@@ -708,13 +708,45 @@ def onrc_sync(cale_csv=None, progres=None):
         os.makedirs(CACHE_DIR, exist_ok=True)
         if progres:
             progres("descarc %s ..." % url.split("/")[-1])
-        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-        with urllib.request.urlopen(req, timeout=120) as r, open(cale_csv, "wb") as f:
-            while True:
-                chunk = r.read(1 << 20)
-                if not chunk:
-                    break
-                f.write(chunk)
+        # Serverul data.gov.ro rupe des conexiunea la fisierele mari si ignora
+        # cererile Range (raspunde 200, nu 206), deci reluarea nu e posibila:
+        # singura optiune corecta e sa reincercam de la zero si sa verificam
+        # marimea la final. Un fisier trunchiat ar da un index tacut incomplet.
+        ultima_eroare = None
+        for incercare in range(1, 4):
+            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+            scris = 0
+            asteptat = None
+            try:
+                with urllib.request.urlopen(req, timeout=120) as r:
+                    asteptat = int(r.headers.get("Content-Length") or 0) or None
+                    with open(cale_csv, "wb") as f:
+                        while True:
+                            chunk = r.read(1 << 20)
+                            if not chunk:
+                                break
+                            f.write(chunk)
+                            scris += len(chunk)
+                            if progres and scris % (50 << 20) < (1 << 20):
+                                progres("  %d MB descarcati..." % (scris >> 20))
+            except Exception as e:
+                ultima_eroare = e
+                if progres:
+                    progres("  incercarea %d a esuat dupa %d MB (%s)" % (incercare, scris >> 20, e))
+                continue
+            if asteptat and scris < asteptat:
+                ultima_eroare = RuntimeError("descarcare trunchiata: %d din %d bytes" % (scris, asteptat))
+                if progres:
+                    progres("  incercarea %d: trunchiat (%d din %d MB)"
+                            % (incercare, scris >> 20, asteptat >> 20))
+                continue
+            ultima_eroare = None
+            break
+        if ultima_eroare is not None:
+            raise RuntimeError(
+                "Nu am putut descarca integral lista ONRC dupa 3 incercari (%s). "
+                "Descarc-o manual de la %s si ruleaza: python3 anaf_mcp.py --sync-onrc /cale/od_firme.csv"
+                % (ultima_eroare, url))
 
     os.makedirs(CACHE_DIR, exist_ok=True)
     tmp = ONRC_DB + ".tmp"
