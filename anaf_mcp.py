@@ -122,8 +122,10 @@ def http_request(url, payload=None, accept="application/json"):
             body = e.read()
         except Exception:
             pass
-        # ANAF raspunde 404 cu un corp JSON valid cand niciun CUI din lot nu e gasit.
-        if body[:1] in (b"{", b"["):
+        # ANAF raspunde 404 cu un corp JSON valid cand niciun CUI din lot nu e gasit,
+        # deci corpul JSON e util. Dar la 429 (limita depasita) sau 5xx corpul poate fi
+        # tot JSON, iar acceptarea lui ar trece o eroare drept "firma negasita".
+        if body[:1] in (b"{", b"[") and e.code not in (429, 500, 502, 503, 504):
             return body
         raise RuntimeError("HTTP %s de la %s: %s"
                            % (e.code, url, body.decode("utf-8", "replace")[:300]))
@@ -407,7 +409,9 @@ def anaf_lookup(cuiuri, data_ref):
         lot = de_cerut[i:i + 100]
         payload = [{"cui": c, "data": data_ref} for c in lot]
         resp = anaf_post(ANAF_TVA_URL, payload)
-        if resp.get("cod") not in (200, None):
+        # 'cod' lipsa a insemnat pana acum "e in regula"; la un corp de eroare fara
+        # camp 'cod' asta ar raporta firme inexistente in loc de o eroare.
+        if resp.get("cod") not in (200, None) or ("found" not in resp and "notFound" not in resp):
             raise RuntimeError("ANAF a raspuns: %s %s" % (resp.get("cod"), resp.get("message")))
         for rec in resp.get("found", []) or []:
             cui = rec.get("date_generale", {}).get("cui")
@@ -728,6 +732,18 @@ def index_sync(progres=None):
     return meta
 
 
+def _limita(valoare, implicit, maxim):
+    """SQLite trateaza LIMIT -1 ca 'fara limita': un singur apel cu limita=-1
+    intorcea 3,5 milioane de randuri si sute de MB de JSON."""
+    try:
+        n = int(valoare)
+    except (TypeError, ValueError):
+        return implicit
+    if n <= 0:
+        return implicit
+    return min(n, maxim)
+
+
 def _norm_nume(s):
     """Minuscule, fara diacritice si fara punctuatie - pentru cautare tolerantă."""
     s = (s or "").lower()
@@ -881,7 +897,7 @@ def onrc_cauta(nume, judet=None, limita=20):
 
 def tool_search_company(args):
     nume = args.get("nume") or args.get("q") or args.get("denumire")
-    rez, meta = onrc_cauta(nume, args.get("judet"), int(args.get("limita") or 20))
+    rez, meta = onrc_cauta(nume, args.get("judet"), _limita(args.get("limita"), 20, 500))
     return {"cautare": nume, "judet": args.get("judet"), "gasite": len(rez), "rezultate": rez,
             "sursa": "Registrul Comertului via data.gov.ro (%s)" % meta.get("sursa", ""),
             "firme_in_index": int(meta.get("firme", 0) or 0),
@@ -932,7 +948,7 @@ def top_firme(an=None, caen=None, judet=None, limita=10, dupa="cifra_afaceri"):
 
 def tool_top_firme(args):
     rez, an, meta = top_firme(args.get("an"), args.get("caen"), args.get("judet"),
-                              int(args.get("limita") or 10), args.get("dupa") or "cifra_afaceri")
+                              _limita(args.get("limita"), 10, 500), args.get("dupa") or "cifra_afaceri")
     return {"an": an, "caen": args.get("caen"), "judet": args.get("judet"),
             "criteriu": args.get("dupa") or "cifra_afaceri", "gasite": len(rez), "clasament": rez,
             "sursa": "Situatiile financiare anuale (Ministerul Finantelor) + ONRC, via data.gov.ro",
