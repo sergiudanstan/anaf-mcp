@@ -3,7 +3,7 @@
   "buildCommand": "python3 tools/fetch_remote_index.py",
   "regions": ["fra1"],
   "functions": {
-    "api/index.py": {
+    "api/**/*.py": {
       "maxDuration": 60,
       "excludeFiles": "{.git/**,.cache-build/**,docs/**,__pycache__/**,**/*.pyc}"
     }
@@ -13,4 +13,3 @@
     { "source": "/health", "destination": "/api/index" }
   ]
 }
-
