@@ -11,8 +11,11 @@ name: Construieste indexul public
 # se vede (ex. calculatorul tau). Altfel, construieste indexul local:
 #
 #     python3 tools/build_index.py --iesire anaf-index.sqlite --gzip
+#     python3 tools/build_remote_index.py --sursa anaf-index.sqlite \
+#       --iesire anaf-remote-index.sqlite.xz
 #     gh release delete latest --yes
-#     gh release create latest anaf-index.sqlite.gz --title "Index curent"
+#     gh release create latest anaf-index.sqlite.gz anaf-remote-index.sqlite.xz \
+#       --title "Index curent"
 on:
   workflow_dispatch:
     inputs:
@@ -39,7 +42,10 @@ jobs:
           python3 tools/build_index.py \
             --ani "${{ github.event.inputs.ani || '2024,2023' }}" \
             --iesire anaf-index.sqlite --gzip
-          ls -la anaf-index.sqlite.gz
+          python3 tools/build_remote_index.py \
+            --sursa anaf-index.sqlite \
+            --iesire anaf-remote-index.sqlite.xz
+          ls -la anaf-index.sqlite.gz anaf-remote-index.sqlite.xz
 
       - name: Verifica indexul inainte de publicare
         run: |
@@ -71,11 +77,11 @@ jobs:
         run: |
           TAG="data-$(date +%Y-%m)"
           gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
-          gh release create "$TAG" anaf-index.sqlite.gz \
+          gh release create "$TAG" anaf-index.sqlite.gz anaf-remote-index.sqlite.xz \
             --title "Index $(date +%Y-%m)" \
-            --notes "Index construit automat: firme ONRC + situatii financiare. Se descarca cu: python3 anaf_mcp.py --sync"
+            --notes "Index local complet + index compact pentru MCP remote. Indexul local se descarca cu: python3 anaf_mcp.py --sync"
           # 'latest' este ce descarca MCP-ul, deci il mutam pe indexul nou
           gh release delete latest --yes 2>/dev/null || true
-          gh release create latest anaf-index.sqlite.gz \
+          gh release create latest anaf-index.sqlite.gz anaf-remote-index.sqlite.xz \
             --title "Index curent" \
             --notes "Indicat de --sync. Reconstruit lunar din $TAG."

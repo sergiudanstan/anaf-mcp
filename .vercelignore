@@ -1,9 +1,10 @@
+.git/
+.cache-build/
 __pycache__/
 *.pyc
-.DS_Store
-.cache/
+docs/
+anaf-index.sqlite
+anaf-index.sqlite.gz
 data/*.sqlite
 data/*.sqlite.gz
 data/*.sqlite.xz
-anaf-remote-index.sqlite.xz
-.vercel/

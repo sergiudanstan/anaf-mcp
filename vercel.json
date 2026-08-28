@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "python3 tools/fetch_remote_index.py",
+  "regions": ["fra1"],
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 60,
+      "excludeFiles": "{.git/**,.cache-build/**,docs/**,__pycache__/**,**/*.pyc}"
+    }
+  },
+  "rewrites": [
+    { "source": "/mcp", "destination": "/api/index" },
+    { "source": "/health", "destination": "/api/index" }
+  ]
+}
+

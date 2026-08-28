@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>anaf-mcp — date publice ANAF și BNR, direct în Claude sau Codex</title>
-<meta name="description" content="Server MCP local pentru date publice ANAF și BNR: verificare firme după CUI, TVA, inactivi, bilanțuri anuale și curs valutar. Un singur fișier Python, fără dependințe.">
+<meta name="description" content="Server MCP remote și local pentru date publice ANAF și BNR: firme după CUI sau nume, TVA, bilanțuri și curs valutar. Fără cont sau API key.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🇷🇴</text></svg>">
 <style>
 :root{
@@ -80,16 +80,17 @@ footer{margin:70px 0 0;padding:26px 0 50px;border-top:1px solid var(--line);colo
   <div class="wrap">
     <div class="flag">MCP server · date publice românești</div>
     <h1>anaf-mcp</h1>
-    <p class="tagline">Verifici firme după CUI, citești bilanțuri și iei cursul BNR — direct din Claude Code, Claude Desktop sau Codex. Datele vin de la sursă, nu printr-un intermediar plătit.</p>
+    <p class="tagline">Verifici firme după CUI sau nume, citești bilanțuri și iei cursul BNR — direct din Claude sau Codex, printr-un link MCP ori local. Datele vin de la sursă.</p>
     <div class="badges">
-      <span class="badge">Un singur fișier Python</span>
+      <span class="badge">Conector remote prin URL</span>
       <span class="badge">Zero dependințe</span>
+      <span class="badge">Fără OAuth</span>
       <span class="badge">Fără cont, fără API key</span>
       <span class="badge">8 tool-uri</span>
       <span class="badge">Licență MIT</span>
     </div>
     <div class="cta">
-      <a class="btn btn-primary" href="#tutorial">Instalare în 2 minute</a>
+      <a class="btn btn-primary" href="#connector">Adaugă prin link</a>
       <a class="btn" href="https://github.com/sergiudanstan/anaf-mcp">Cod pe GitHub →</a>
     </div>
   </div>
@@ -98,7 +99,7 @@ footer{margin:70px 0 0;padding:26px 0 50px;border-top:1px solid var(--line);colo
 <main class="wrap">
 
 <h2>Ce face</h2>
-<p>Un server <a href="https://modelcontextprotocol.io">MCP</a> care rulează local pe calculatorul tău și dă asistentului acces la trei surse publice și gratuite:</p>
+<p>Un server <a href="https://modelcontextprotocol.io">MCP</a> care poate rula remote prin Streamable HTTP sau local pe calculatorul tău și dă asistentului acces la surse publice și gratuite:</p>
 <table>
   <thead><tr><th>Sursă</th><th>Ce conține</th></tr></thead>
   <tbody>
@@ -118,12 +119,29 @@ footer{margin:70px 0 0;padding:26px 0 50px;border-top:1px solid var(--line);colo
   <div class="tool"><h4>bnr_conversie</h4><p>Conversie între valute la cursul BNR dintr-o dată anume.</p></div>
   <div class="tool"><h4>search_caen</h4><p>Caută în nomenclatorul CAEN după cod (<code>4754</code> sau prefixul <code>47</code>) ori după cuvinte din denumire. Diacriticele nu contează.</p></div>
   <div class="tool"><h4>top_firme</h4><p>Clasamentul firmelor dintr-un an după cifra de afaceri, profit net sau salariați — filtrabil pe cod CAEN și județ. Fără limitări Free/Pro: câte ceri, atâtea primești.</p></div>
-  <div class="tool"><h4>search_company</h4><p>Caută firma <strong>după denumire</strong>, nu după CUI — ANAF nu are așa ceva. Folosește lista Registrului Comerțului, indexată local. Cere o sincronizare unică.</p></div>
+  <div class="tool"><h4>search_company</h4><p>Caută firma <strong>după denumire</strong>, nu după CUI — ANAF nu are așa ceva. Folosește lista Registrului Comerțului indexată de server și întoarce CUI-ul.</p></div>
 </div>
 
-<h2 id="tutorial">Tutorial</h2>
+<h2 id="connector">Varianta rapidă: conector prin link</h2>
+<p>Deploy-ul remote este public, read-only și nu cere cont, OAuth Client ID, secret sau cheie API.</p>
+<p><a class="btn btn-primary" href="https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fsergiudanstan%2Fanaf-mcp&amp;project-name=anaf-mcp&amp;repository-name=anaf-mcp">Deploy with Vercel</a></p>
+<p>După deploy, endpointul conectorului este:</p>
+<pre><code>https://NUMELE-DEPLOYMENTULUI.vercel.app/mcp</code></pre>
 
-<div class="step"><span class="num">1</span><h3>Instalare</h3></div>
+<h3>Claude / Claude Desktop</h3>
+<p>Deschide <strong>Customize → Connectors → + → Add custom connector</strong>, pune un nume și lipește URL-ul complet terminat în <code>/mcp</code>. Lasă setările OAuth necompletate.</p>
+<pre><code>claude mcp add --transport http anaf https://NUMELE-DEPLOYMENTULUI.vercel.app/mcp
+claude mcp list</code></pre>
+
+<h3>Codex / ChatGPT desktop</h3>
+<p>Deschide <strong>Settings → MCP servers → Add server → Streamable HTTP</strong> și lipește același URL.</p>
+<pre><code>codex mcp add anaf --url https://NUMELE-DEPLOYMENTULUI.vercel.app/mcp
+codex mcp list</code></pre>
+<div class="note"><strong>Dacă apare OAuth:</strong> verifică URL-ul. Trebuie să fie endpointul HTTPS terminat în <code>/mcp</code>, nu pagina GitHub și nu această pagină de documentație.</div>
+
+<h2 id="tutorial">Instalare locală (opțional)</h2>
+
+<div class="step"><span class="num">1</span><h3>Descărcare și test</h3></div>
 <p>Ai nevoie doar de Python 3 — există deja pe macOS și Linux; pe Windows se ia de pe <a href="https://www.python.org/downloads/">python.org</a>.</p>
 <pre><code>git clone https://github.com/sergiudanstan/anaf-mcp.git
 cd anaf-mcp
@@ -132,7 +150,7 @@ python3 anaf_mcp.py --firma 14399840</code></pre>
 <pre><code>pwd    # ex: /Users/dan/anaf-mcp
        # → calea completă e /Users/dan/anaf-mcp/anaf_mcp.py</code></pre>
 
-<div class="step"><span class="num">2</span><h3>Claude Code</h3></div>
+<div class="step"><span class="num">2</span><h3>Claude Code local</h3></div>
 <p>O singură comandă, din orice folder:</p>
 <pre><code>claude mcp add anaf -- python3 /CALEA/ABSOLUTA/CATRE/anaf-mcp/anaf_mcp.py</code></pre>
 <p>Adaugă <code>-s user</code> dacă vrei serverul disponibil în toate proiectele, nu doar în cel curent:</p>
@@ -146,7 +164,7 @@ cât era euro pe 30 iunie 2026?
 convertește 12.500 EUR în RON la cursul din 15 martie 2026</code></pre>
 <p>Ștergi serverul cu <code>claude mcp remove anaf</code>.</p>
 
-<div class="step"><span class="num">3</span><h3>Codex (OpenAI Codex CLI)</h3></div>
+<div class="step"><span class="num">3</span><h3>Codex local</h3></div>
 <p>Editezi <code>~/.codex/config.toml</code> și adaugi:</p>
 <pre><code>[mcp_servers.anaf]
 command = "python3"
@@ -157,7 +175,7 @@ codex mcp list</code></pre>
 <p>Repornești <code>codex</code> și ceri la fel, în limbaj natural.</p>
 <div class="note"><strong>Capcana uzuală:</strong> în Codex secțiunea se numește <code>mcp_servers</code> (cu underscore), iar în Claude <code>mcpServers</code> (camelCase). E cea mai frecventă greșeală de configurare.</div>
 
-<div class="step"><span class="num">4</span><h3>Claude Desktop</h3></div>
+<div class="step"><span class="num">4</span><h3>Claude Desktop local</h3></div>
 <p>Editezi <code>~/Library/Application Support/Claude/claude_desktop_config.json</code> pe macOS, sau <code>%APPDATA%\Claude\claude_desktop_config.json</code> pe Windows:</p>
 <pre><code>{
   "mcpServers": {
@@ -175,6 +193,7 @@ codex mcp list</code></pre>
 <p>Descarcă ~350 MB de pe GitHub Releases și îl despachetează în <code>~/.cache/anaf-mcp/</code>. Conține <strong>4.201.586 de firme</strong> de la Registrul Comerțului și <strong>899.961 de rânduri</strong> din situațiile financiare anuale.</p>
 <p>Indexul se reconstruiește cu <code>tools/build_index.py</code> și se publică ca release. Build-ul trebuie rulat dintr-o rețea din România: data.gov.ro rezolvă DNS-ul, dar refuză conexiunile din cloud-ul din afara țării — pe runnerele GitHub expiră.</p>
 <p>Fluxul firesc: cauți după nume → iei CUI-ul → îl dai la <code>anaf_firma</code> pentru datele fiscale <strong>la zi</strong>. Indexul e o fotografie lunară; ANAF e sursa live.</p>
+<p>În deployment-ul remote, indexul compact este inclus automat; utilizatorul nu descarcă nimic.</p>
 
 <div class="step"><span class="num">6</span><h3>Verificare din terminal, fără client</h3></div>
 <p>Fiecare tool are un echivalent CLI — util ca să vezi dacă problema e la server sau la client:</p>
@@ -194,6 +213,7 @@ python3 anaf_mcp.py --test</code></pre>
     <tr><td>merge în terminal, dar nu în client</td><td>ai editat alt fișier de config, sau nu ai repornit clientul</td></tr>
     <tr><td>HTTP 403 de la ANAF</td><td>ai modificat <code>USER_AGENT</code>; WAF-ul ANAF respinge șirurile cu paranteze sau <code>;</code></td></tr>
     <tr><td>date vechi</td><td>e cache-ul: <code>rm -rf ~/.cache/anaf-mcp</code></td></tr>
+    <tr><td>Claude cere OAuth Client ID</td><td>ai introdus pagina GitHub în locul URL-ului remote terminat în <code>/mcp</code></td></tr>
   </tbody>
 </table>
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-anaf-mcp — server MCP local pentru date publice romanesti.
+anaf-mcp — server MCP local sau remote pentru date publice romanesti.
 
 Surse (toate publice si gratuite, fara cont si fara cheie de API):
   - ANAF  : https://webservicesp.anaf.ro/api/PlatitorTvaRest/v9/tva   (date firma, TVA, inactivi, e-Factura)
@@ -9,7 +9,8 @@ Surse (toate publice si gratuite, fara cont si fara cheie de API):
   - BNR   : https://curs.bnr.ro/nbrfxrates.xml + arhiva pe ani         (curs valutar de referinta)
 
 Fara dependinte externe: doar biblioteca standard Python 3.
-Comunica pe stdio (JSON-RPC 2.0), conform protocolului MCP.
+Comunica pe stdio (acest fisier) sau Streamable HTTP (remote_mcp.py),
+conform protocolului MCP.
 
 Rulare manuala pentru test:
     python3 anaf_mcp.py --test
@@ -35,8 +36,15 @@ import xml.etree.ElementTree as ET
 from datetime import date, datetime
 
 SERVER_NAME = "anaf-mcp"
-SERVER_VERSION = "1.1.0"
-PROTOCOL_VERSION = "2024-11-05"
+SERVER_VERSION = "1.3.0"
+PROTOCOL_VERSION = "2025-06-18"
+SUPPORTED_PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
+SERVER_INSTRUCTIONS = (
+    "Server read-only pentru date publice romanesti. Pentru o firma cunoscuta doar dupa nume, "
+    "apeleaza mai intai search_company, apoi anaf_firma cu CUI-ul gasit. Pentru performanta si "
+    "corectitudine, nu cere mai mult de 100 de CUI-uri odata si nu depasi limitele tool-urilor. "
+    "Valorile financiare sunt in lei, iar bilanturile sunt anuale."
+)
 
 ANAF_TVA_URL = "https://webservicesp.anaf.ro/api/PlatitorTvaRest/v9/tva"
 ANAF_BILANT_URL = "https://webservicesp.anaf.ro/bilant?an={an}&cui={cui}"
@@ -691,7 +699,10 @@ ONRC_DB = os.path.join(CACHE_DIR, "onrc_firme.sqlite")
 
 def index_db():
     """Indexul complet daca exista, altfel cel local, altfel None."""
-    for cale in (INDEX_DB, ONRC_DB):
+    explicit = os.environ.get("ANAF_MCP_INDEX_DB")
+    for cale in (explicit, INDEX_DB, ONRC_DB):
+        if not cale:
+            continue
         if os.path.exists(cale):
             return cale
     return None
@@ -873,19 +884,36 @@ def onrc_cauta(nume, judet=None, limita=20):
     q = _norm_nume(nume)
     if not q:
         return [], {}
+    if len(q) < 2:
+        raise ValueError("Cautarea dupa denumire trebuie sa aiba cel putin 2 caractere")
     con = sqlite3.connect(db)
     coloane = {r[1] for r in con.execute("PRAGMA table_info(firme)")}
-    # indexurile construite local inainte de v1.2 aveau alt nume pentru coloana asta
-    col_reg = "nr_reg_com" if "nr_reg_com" in coloane else "cod_inmatriculare"
-    sql = ("SELECT cui, denumire, %s, data_inmatriculare, forma_juridica, judet, localitate "
-           "FROM firme WHERE nume_norm LIKE ?" % col_reg)
-    par = ["%" + q + "%"]
-    if judet:
-        sql += " AND lower(judet) LIKE ?"
-        par.append("%" + _norm_nume(judet) + "%")
-    # potrivirile care incep cu termenul cautat sunt mai relevante
-    sql += " ORDER BY (nume_norm LIKE ?) DESC, length(denumire) LIMIT ?"
-    par += [q + "%", int(limita)]
+    if "denumire" in coloane:
+        # Indexul local complet pastreaza toate campurile ONRC.
+        # Indexurile construite inainte de v1.2 aveau alt nume pentru nr. de registru.
+        col_reg = "nr_reg_com" if "nr_reg_com" in coloane else "cod_inmatriculare"
+        sql = ("SELECT cui, denumire, %s, data_inmatriculare, forma_juridica, judet, localitate "
+               "FROM firme WHERE nume_norm LIKE ?" % col_reg)
+        par = ["%" + q + "%"]
+        if judet:
+            sql += " AND lower(judet) LIKE ?"
+            par.append("%" + _norm_nume(judet) + "%")
+        sql += " ORDER BY (nume_norm LIKE ?) DESC, length(denumire) LIMIT ?"
+        par += [q + "%", int(limita)]
+    else:
+        # Deployment-ul remote foloseste un index compact (nume normalizat + CUI),
+        # ca sa incapa intr-o functie serverless. Datele fiscale si denumirea oficiala
+        # se obtin apoi live cu anaf_firma.
+        if judet:
+            con.close()
+            raise ValueError(
+                "Filtrul dupa judet este disponibil in instalarea locala. "
+                "Pe serverul remote cauta dupa nume, apoi verifica rezultatul cu anaf_firma."
+            )
+        sql = ("SELECT cui, upper(nume_norm), NULL, NULL, NULL, NULL, NULL "
+               "FROM firme WHERE nume_norm LIKE ? "
+               "ORDER BY (nume_norm LIKE ?) DESC, length(nume_norm) LIMIT ?")
+        par = ["%" + q + "%", q + "%", int(limita)]
     rows = con.execute(sql, par).fetchall()
     meta = dict(con.execute("SELECT cheie, valoare FROM meta").fetchall())
     con.close()
@@ -1051,8 +1079,8 @@ TOOLS = [
         "name": "search_company",
         "description": (
             "Cauta o firma DUPA DENUMIRE (ANAF permite doar cautare dupa CUI). Foloseste lista "
-            "Registrului Comertului, indexata local. Intoarce CUI-ul, care apoi se poate da la "
-            "anaf_firma pentru datele fiscale la zi. Necesita o sincronizare unica: --sync-onrc."
+            "Registrului Comertului indexata de server. Intoarce CUI-ul, care apoi se poate da la "
+            "anaf_firma pentru denumirea oficiala si datele fiscale la zi."
         ),
         "inputSchema": {
             "type": "object",
@@ -1085,6 +1113,16 @@ TOOLS = [
     },
 ]
 
+# Toate operatiile sunt interogari peste surse publice; metadata ajuta clientii
+# MCP sa nu afiseze confirmari de scriere pentru fiecare apel.
+for _tool in TOOLS:
+    _tool["annotations"] = {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    }
+
 HANDLERS = {
     "search_caen": tool_search_caen,
     "top_firme": tool_top_firme,
@@ -1107,17 +1145,23 @@ def send(msg):
 
 
 def handle(req):
+    if not isinstance(req, dict):
+        return {"jsonrpc": "2.0", "id": None,
+                "error": {"code": -32600, "message": "Cerere JSON-RPC invalida"}}
     method = req.get("method")
     rid = req.get("id")
     params = req.get("params") or {}
 
     if method == "initialize":
+        requested = params.get("protocolVersion")
+        negotiated = requested if requested in SUPPORTED_PROTOCOL_VERSIONS else PROTOCOL_VERSION
         return {
             "jsonrpc": "2.0", "id": rid,
             "result": {
-                "protocolVersion": PROTOCOL_VERSION,
-                "capabilities": {"tools": {}},
+                "protocolVersion": negotiated,
+                "capabilities": {"tools": {"listChanged": False}},
                 "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
+                "instructions": SERVER_INSTRUCTIONS,
             },
         }
 

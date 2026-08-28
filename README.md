@@ -1,7 +1,8 @@
-# anaf-mcp — MCP local pentru date publice ANAF / BNR
+# anaf-mcp — MCP remote și local pentru date publice ANAF / BNR
 
 Server MCP care ia datele **direct de la sursă**, nu printr-un intermediar plătit.
-Un singur fișier Python, **zero dependențe** (doar biblioteca standard), rulează local.
+Poate fi adăugat printr-un singur URL în Claude sau Codex, ori poate rula local.
+Implementarea folosește doar biblioteca standard Python.
 
 📖 **Tutorial și documentație: [sergiudanstan.github.io/anaf-mcp](https://sergiudanstan.github.io/anaf-mcp/)**
 
@@ -30,9 +31,51 @@ Toate sunt publice, fără cont și fără cheie de API.
 
 ---
 
-# Tutorial
+# Instalare rapidă prin link (recomandată)
 
-## 1. Instalare
+Versiunea remote expune un endpoint MCP **Streamable HTTP**, public și read-only. Nu cere cont,
+OAuth Client ID, secret sau cheie API. După ce faci deploy, URL-ul conectorului este:
+
+```text
+https://NUMELE-DEPLOYMENTULUI.vercel.app/mcp
+```
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fsergiudanstan%2Fanaf-mcp&project-name=anaf-mcp&repository-name=anaf-mcp)
+
+Build-ul descarcă automat indexul compact din GitHub Releases. Nu sunt necesare variabile de mediu.
+
+## Claude / Claude Desktop
+
+1. Deschide **Customize → Connectors → + → Add custom connector**.
+2. Pune un nume, de exemplu `ANAF România`.
+3. Lipește URL-ul complet care se termină în **`/mcp`**.
+4. Nu completa setările OAuth; conectorul este public și nu are autentificare.
+
+Pentru Claude Code, aceeași instalare se face dintr-o comandă:
+
+```bash
+claude mcp add --transport http anaf https://NUMELE-DEPLOYMENTULUI.vercel.app/mcp
+claude mcp list
+```
+
+## Codex / ChatGPT desktop
+
+În aplicația desktop: **Settings → MCP servers → Add server → Streamable HTTP**, apoi lipește URL-ul.
+Codex CLI acceptă același endpoint:
+
+```bash
+codex mcp add anaf --url https://NUMELE-DEPLOYMENTULUI.vercel.app/mcp
+codex mcp list
+```
+
+> Dacă apare un mesaj despre „sign-in service” sau OAuth Client ID, verifică URL-ul: trebuie să fie
+> endpointul HTTPS terminat în `/mcp`, nu pagina GitHub și nu pagina de documentație GitHub Pages.
+
+---
+
+# Instalare locală (opțional)
+
+## 1. Descărcare și test
 
 Ai nevoie doar de Python 3 (există deja pe macOS și Linux; pe Windows se ia de pe python.org).
 
@@ -48,7 +91,7 @@ Dacă vezi un JSON cu `"denumire": "DANTE INTERNATIONAL SA"`, serverul merge. Re
 pwd    # ex: /Users/dan/anaf-mcp  →  calea completă e /Users/dan/anaf-mcp/anaf_mcp.py
 ```
 
-## 2. Claude Code
+## 2. Claude Code local
 
 O singură comandă, din orice folder:
 
@@ -80,7 +123,7 @@ convertește 12.500 EUR în RON la cursul din 15 martie 2026
 
 Ștergi serverul cu `claude mcp remove anaf`.
 
-## 3. Codex (OpenAI Codex CLI)
+## 3. Codex local (OpenAI Codex CLI)
 
 Editezi `~/.codex/config.toml` și adaugi:
 
@@ -101,7 +144,7 @@ Repornești `codex` și ceri la fel, în limbaj natural: *„verifică la ANAF C
 
 > Atenție la numele secțiunii: în Codex e `mcp_servers` (cu underscore), în Claude e `mcpServers` (camelCase). E cea mai frecventă greșeală.
 
-## 4. Claude Desktop
+## 4. Claude Desktop local
 
 Editezi `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) sau
 `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
@@ -147,6 +190,10 @@ python3 anaf_mcp.py --top 4754
 
 Fluxul firesc: cauți după nume → iei CUI-ul → îl dai la `anaf_firma` pentru datele fiscale **la zi**, direct de la ANAF. Indexul e o fotografie lunară; ANAF e sursa live.
 
+În deployment-ul remote, un index compact este inclus automat. Nu se rulează `--sync` pe calculatorul
+utilizatorului. Varianta compactă păstrează CUI-ul și numele normalizat pentru căutare; `anaf_firma`
+întoarce apoi denumirea oficială și starea fiscală live.
+
 ## 6. Verificare din terminal, fără client
 
 Fiecare tool are un echivalent CLI, util ca să vezi dacă problema e la server sau la client:
@@ -168,6 +215,34 @@ python3 anaf_mcp.py --test
 | merge în terminal, nu în client | ai editat alt fișier de config, sau nu ai repornit clientul |
 | „HTTP 403" de la ANAF | ai modificat `USER_AGENT`; WAF-ul ANAF respinge șirurile cu paranteze sau `;` |
 | date vechi | e cache-ul: `rm -rf ~/.cache/anaf-mcp` |
+| Claude cere OAuth Client ID | ai introdus pagina repo-ului în locul URL-ului remote terminat în `/mcp` |
+
+---
+
+## Deploy remote manual
+
+Deployment-ul Vercel folosește `api/index.py`, `remote_mcp.py` și `vercel.json`. Pentru un preview:
+
+```bash
+vercel deploy -y
+```
+
+La actualizarea lunară a datelor, publică ambele indexuri în release-ul `latest`:
+
+```bash
+python3 tools/build_index.py --iesire anaf-index.sqlite --gzip
+python3 tools/build_remote_index.py \
+  --sursa anaf-index.sqlite \
+  --iesire anaf-remote-index.sqlite.xz
+gh release upload latest anaf-index.sqlite.gz anaf-remote-index.sqlite.xz --clobber
+```
+
+Serverul HTTP poate fi verificat și local, înainte de deploy:
+
+```bash
+python3 remote_mcp.py --port 8765
+# endpoint: http://127.0.0.1:8765/mcp
+```
 
 ---
 
