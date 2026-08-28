@@ -1,6 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "python3 tools/fetch_remote_index.py",
+  "outputDirectory": "docs",
   "regions": ["fra1"],
   "functions": {
     "api/**/*.py": {
