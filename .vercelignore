@@ -2,7 +2,6 @@
 .cache-build/
 __pycache__/
 *.pyc
-docs/
 anaf-index.sqlite
 anaf-index.sqlite.gz
 data/*.sqlite
