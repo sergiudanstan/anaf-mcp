@@ -1,10 +1,17 @@
 # anaf-mcp — MCP remote și local pentru date publice ANAF / BNR
 
+[![CI](https://github.com/sergiudanstan/anaf-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/sergiudanstan/anaf-mcp/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/sergiudanstan/anaf-mcp/actions/workflows/codeql.yml/badge.svg)](https://github.com/sergiudanstan/anaf-mcp/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/sergiudanstan/anaf-mcp/badge)](https://scorecard.dev/viewer/?uri=github.com/sergiudanstan/anaf-mcp)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Server MCP care ia datele **direct de la sursă**, nu printr-un intermediar plătit.
 Poate fi adăugat printr-un singur URL în Claude sau Codex, ori poate rula local.
 Implementarea folosește doar biblioteca standard Python.
 
 📖 **Tutorial și documentație: [sergiudanstan.github.io/anaf-mcp](https://sergiudanstan.github.io/anaf-mcp/)**
+
+**Live:** https://sergiudanstan.github.io/anaf-mcp/
 
 ## Ce date ia și de unde
 
@@ -269,6 +276,14 @@ Cache pe disc în `~/.cache/anaf-mcp/` (sau `ANAF_MCP_CACHE_DIR`), cu TTL per ti
 **Contracte și achiziții publice (SEAP/SICAP).** API-ul public de la `e-licitatie.ro` răspunde, dar filtrele după firmă, dată sau cod CPV sunt ignorate de server — întoarce mereu aceeași felie fixă de 2000 de înregistrări. Fără contractul corect de filtrare, orice tool construit peste el ar da rezultate greșite, așa că nu există aici.
 
 **Asociați, administratori, istoric mențiuni.** ONRC le dă doar prin RECOM, contra cost. (Lista reprezentanților legali există totuși ca fișier deschis pe data.gov.ro, dacă vrei să o indexezi similar.)
+
+## Dezvoltare
+
+```bash
+python3 -m unittest discover -s tests -v    # doar biblioteca standard, fără rețea
+```
+
+Vezi [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md) și [CHANGELOG.md](CHANGELOG.md). Versiunea curentă este `SERVER_VERSION` din `anaf_mcp.py`. Release-urile `latest` și `data-YYYY-MM` conțin indexul de date, nu codul; codul se publică cu etichete `v*`.
 
 ## Licență
 
