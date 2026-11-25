@@ -36,7 +36,7 @@ import xml.etree.ElementTree as ET
 from datetime import date, datetime
 
 SERVER_NAME = "anaf-mcp"
-SERVER_VERSION = "1.3.0"
+SERVER_VERSION = "1.4.0"
 PROTOCOL_VERSION = "2025-06-18"
 SUPPORTED_PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
 SERVER_INSTRUCTIONS = (
